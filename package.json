@@ -1,0 +1,13 @@
+{
+  "name": "qa-project2",
+  "version": "1.0.0",
+  "description": "Projects and Tasks API with user roles",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "better-sqlite3": "^11.0.0"
+  }
+}
