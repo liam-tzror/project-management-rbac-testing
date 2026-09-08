@@ -2,7 +2,16 @@ import os
 import requests
 import pytest
 
+from dotenv import load_dotenv
+load_dotenv()
+
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:3000")
+
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
+
+USER_USERNAME = os.environ.get("USER_USERNAME")
+USER_PASSWORD = os.environ.get("USER_PASSWORD")
 
 
 # ============================================================
@@ -13,8 +22,8 @@ BASE_URL = os.environ.get("BASE_URL", "http://localhost:3000")
 def admin_user():
     response_login = requests.post(f"{BASE_URL}/login",
                              json={
-                                 "username": "liam",
-                                 "password": "1234"})
+                                 "username": ADMIN_USERNAME,
+                                 "password": ADMIN_PASSWORD})
     assert response_login.status_code == 200
     return {"token": response_login.json()["token"], "id": response_login.json()["id"]}
 
@@ -22,11 +31,11 @@ def admin_user():
 @pytest.fixture
 def user_token():
     requests.post(f"{BASE_URL}/register",
-                  json={"username": "liamUser", "password": "1234"})
+                  json={"username": USER_USERNAME, "password": USER_PASSWORD})
     response_login = requests.post(f"{BASE_URL}/login",
                                  json={
-                                     "username": "liamUser",
-                                     "password": "1234"})
+                                     "username": USER_USERNAME,
+                                     "password": USER_PASSWORD})
     assert response_login.status_code == 200
     user_id = response_login.json()["id"]
     yield response_login.json()["token"]
@@ -245,8 +254,8 @@ def test_user_cannot_set_owner_id_on_create(user_session, admin_user):
     # owner of a project they're creating. The server must ignore
     # whatever owner_id is sent and use the actual logged-in user's id.
     response_login = requests.post(f"{BASE_URL}/login",
-                                   json={"username": "liamUser",
-                                         "password": "1234"})
+                                   json={"username": USER_USERNAME,
+                                         "password": USER_PASSWORD})
     user_id = response_login.json()["id"]
 
     response = user_session.post(f"{BASE_URL}/projects",
@@ -383,40 +392,40 @@ def test_register_missing_password():
 
 def test_register_duplicate_username():
     response = requests.post(f"{BASE_URL}/register",
-                             json={"username": "liam",
-                                   "password": "1234"})
+                             json={"username": ADMIN_USERNAME,
+                                   "password": ADMIN_PASSWORD})
     assert response.status_code == 400
     assert response.json()["error"] == "Username already exists"
 
 
 def test_login_wrong_password():
     response = requests.post(f"{BASE_URL}/login",
-                             json={"username": "liam",
-                                   "password": "123"})
+                             json={"username": "liam32",
+                                   "password": "12652313"})
     assert response.status_code == 401
     assert response.json()["error"] == "Invalid username or password"
 
 
 def test_login_nonexistent_user():
     response = requests.post(f"{BASE_URL}/login",
-                                 json={"username": "liam9",
-                                       "password": "1234"})
+                                 json={"username": "liam441",
+                                       "password": "16734"})
     assert response.status_code == 401
     assert response.json()["error"] == "Invalid username or password"
 
 
 def test_admin_login_returns_correct_role():
     response = requests.post(f"{BASE_URL}/login",
-                             json={"username": "liam",
-                                   "password": "1234"})
+                             json={"username": ADMIN_USERNAME,
+                                   "password": ADMIN_PASSWORD})
     assert response.status_code == 200
     assert response.json()["role"] == "admin"
 
 
 def test_user_login_returns_correct_role(user_session):
     response = requests.post(f"{BASE_URL}/login",
-                             json={"username": "liamUser",
-                                   "password": "1234"})
+                             json={"username": USER_USERNAME,
+                                   "password": USER_PASSWORD})
     assert response.status_code == 200
     assert response.json()["role"] == "user"
 
@@ -482,14 +491,14 @@ def test_public_registration_can_create_admin():
     # exists (it's expected to pass, but "passing" here means the
     # security hole is confirmed, not that the system is safe)
     response = requests.post(f"{BASE_URL}/register",
-                             json={"username": "liamadmin",
+                             json={"username": "createadmin",
                                    "password": "123456",
                                    "role": "admin"})
     assert response.status_code == 201
 
     response = requests.post(f"{BASE_URL}/login",
                              json={
-                                 "username": "liamadmin",
+                                 "username": "createadmin",
                                  "password": "123456"})
     assert response.status_code == 200
     user_id = response.json()["id"]
