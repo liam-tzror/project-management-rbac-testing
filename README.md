@@ -25,6 +25,7 @@ qa-project2/
 ├── package.json
 ├── index.html
 ├── setup.py
+├── requirements.txt
 ├── .env.example
 ├── API_DOCUMENTATION.md
 ├── .github/
