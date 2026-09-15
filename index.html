@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>ניהול פרויקטים</title>
+<style>
+  body { font-family: Arial; max-width: 750px; margin: 40px auto; }
+  .screen { display: none; }
+  .screen.active { display: block; }
+  input, select, button { padding: 8px; margin: 4px 0; font-size: 14px; }
+  li { margin: 8px 0; padding: 8px; border: 1px solid #ccc; border-radius: 4px; list-style: none; }
+  .badge { padding: 2px 10px; border-radius: 10px; font-size: 12px; color: white; }
+  .badge.admin { background: #c0392b; }
+  .badge.user { background: #2980b9; }
+  .owner-tag { font-size: 12px; color: #888; }
+  .error { color: red; }
+  .admin-only { border: 1px dashed #c0392b; padding: 6px; margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<!-- מסך 1: התחברות -->
+<div id="login-screen" class="screen active">
+  <h2>התחברות</h2>
+  <input type="text" id="username" placeholder="שם משתמש"><br>
+  <input type="password" id="password" placeholder="סיסמה"><br>
+  <button id="login-button">התחבר</button>
+  <p id="login-error" class="error"></p>
+  <p id="login-success" style="color: green;"></p>
+  <p><a href="#" id="go-to-register-link">אין לך חשבון? הירשם כאן</a></p>
+</div>
+
+<!-- מסך 1ב: הרשמה -->
+<div id="register-screen" class="screen">
+  <h2>הרשמה</h2>
+  <input type="text" id="register-username" placeholder="שם משתמש"><br>
+  <input type="password" id="register-password" placeholder="סיסמה"><br>
+  <button id="register-button">הירשם</button>
+  <p id="register-error" class="error"></p>
+  <p id="register-success" style="color: green;"></p>
+  <p><a href="#" id="go-to-login-link">כבר יש לך חשבון? התחבר כאן</a></p>
+</div>
+
+<!-- מסך 2: רשימת פרויקטים -->
+<div id="projects-screen" class="screen">
+  <h2>הפרויקטים שלי <span id="role-badge" class="badge"></span></h2>
+  <input type="text" id="new-project-name" placeholder="שם פרויקט חדש">
+  <button id="add-project-button">הוסף פרויקט</button>
+  <p id="project-error" class="error"></p>
+  <ul id="project-list"></ul>
+  <button id="logout-button">התנתק</button>
+</div>
+
+<!-- מסך 3: משימות בתוך פרויקט -->
+<div id="tasks-screen" class="screen">
+  <button id="back-to-projects-button">&larr; חזרה לפרויקטים</button>
+  <h2 id="current-project-name"></h2>
+  <input type="text" id="new-task-title" placeholder="שם משימה חדשה">
+  <button id="add-task-button">הוסף משימה</button>
+  <p id="task-error" class="error"></p>
+  <ul id="task-list"></ul>
+
+  <!-- מוצג רק ל-admin -->
+  <div id="admin-panel" class="admin-only" style="display:none;">
+    <strong>פאנל ניהול (admin בלבד)</strong>
+    <p>בתור admin, אתה יכול לערוך ולמחוק גם משימות שאינן שלך.</p>
+  </div>
+</div>
+
+<script>
+const API = "http://localhost:3000";
+let token = null;
+let role = null;
+let currentProjectId = null;
+
+function showScreen(id, path, pushHistory = true) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  if (pushHistory && path) {
+    history.pushState({ screen: id }, "", path);
+  }
+}
+
+// טיפול בכפתור אחורה/קדימה של הדפדפן
+window.addEventListener("popstate", (e) => {
+  route(location.pathname, false);
+});
+
+// מסלול נתיבים - איזה מסך שייך לאיזה URL
+function route(path, pushHistory = true) {
+  if (path === "/register") {
+    showScreen("register-screen", "/register", pushHistory);
+  } else if (path === "/projects") {
+    if (!token) { showScreen("login-screen", "/", pushHistory); return; }
+    loadProjects();
+    showScreen("projects-screen", "/projects", pushHistory);
+  } else if (path.startsWith("/projects/") && path.endsWith("/tasks")) {
+    if (!token) { showScreen("login-screen", "/", pushHistory); return; }
+    const id = path.split("/")[2];
+    const proj = lastKnownProjects.find(p => String(p.id) === id);
+    openProject(id, proj ? proj.name : "", pushHistory);
+  } else {
+    showScreen("login-screen", "/", pushHistory);
+  }
+}
+
+let lastKnownProjects = [];
+
+// טעינה ראשונית - מפרש את ה-URL הנוכחי כשהדף נטען
+route(location.pathname, false);
+
+// --- התחברות ---
+document.getElementById("login-button").addEventListener("click", async () => {
+  const username = document.getElementById("username").value;
+  const password = document.getElementById("password").value;
+  const res = await fetch(`${API}/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password })
+  });
+  const data = await res.json();
+  if (res.ok) {
+    token = data.token;
+    role = data.role;
+    const badge = document.getElementById("role-badge");
+    badge.textContent = role;
+    badge.className = "badge " + role;
+    document.getElementById("login-error").textContent = "";
+    document.getElementById("login-success").textContent = "";
+    route("/projects");
+  } else {
+    document.getElementById("login-error").textContent = data.error;
+  }
+});
+
+document.getElementById("logout-button").addEventListener("click", () => {
+  token = null;
+  role = null;
+  document.getElementById("username").value = "";
+  document.getElementById("password").value = "";
+  showScreen("login-screen", "/");
+});
+
+// --- מעבר בין login ל-register ---
+document.getElementById("go-to-register-link").addEventListener("click", (e) => {
+  e.preventDefault();
+  showScreen("register-screen", "/register");
+});
+
+document.getElementById("go-to-login-link").addEventListener("click", (e) => {
+  e.preventDefault();
+  showScreen("login-screen", "/");
+});
+
+// --- הרשמה ---
+document.getElementById("register-button").addEventListener("click", async () => {
+  const username = document.getElementById("register-username").value;
+  const password = document.getElementById("register-password").value;
+  const res = await fetch(`${API}/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password })
+  });
+  const data = await res.json();
+  if (res.ok) {
+    document.getElementById("register-error").textContent = "";
+    document.getElementById("register-username").value = "";
+    document.getElementById("register-password").value = "";
+    document.getElementById("login-success").textContent = "נרשמת בהצלחה! אפשר להתחבר עכשיו.";
+    showScreen("login-screen", "/");
+  } else {
+    document.getElementById("register-success").textContent = "";
+    document.getElementById("register-error").textContent = data.error;
+  }
+});
+
+// --- פרויקטים ---
+async function loadProjects() {
+  const res = await fetch(`${API}/projects`, {
+    headers: { authorization: token }
+  });
+  const projects = await res.json();
+  lastKnownProjects = projects;
+  const list = document.getElementById("project-list");
+  list.innerHTML = "";
+  projects.forEach(p => {
+    const li = document.createElement("li");
+    const isMine = role === "admin" ? "" : "";
+    li.innerHTML = `${p.name} <span class="owner-tag">(owner: ${p.owner_id})</span> `;
+    const openBtn = document.createElement("button");
+    openBtn.textContent = "פתח";
+    openBtn.addEventListener("click", () => route(`/projects/${p.id}/tasks`));
+    const delBtn = document.createElement("button");
+    delBtn.textContent = "מחק";
+    delBtn.addEventListener("click", () => deleteProject(p.id));
+    li.appendChild(openBtn);
+    li.appendChild(delBtn);
+    list.appendChild(li);
+  });
+}
+
+document.getElementById("add-project-button").addEventListener("click", async () => {
+  const name = document.getElementById("new-project-name").value;
+  const res = await fetch(`${API}/projects`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", authorization: token },
+    body: JSON.stringify({ name })
+  });
+  const data = await res.json();
+  if (res.ok) {
+    document.getElementById("project-error").textContent = "";
+    document.getElementById("new-project-name").value = "";
+    loadProjects();
+  } else {
+    document.getElementById("project-error").textContent = data.error;
+  }
+});
+
+async function deleteProject(id) {
+  const res = await fetch(`${API}/projects/${id}`, {
+    method: "DELETE",
+    headers: { authorization: token }
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    document.getElementById("project-error").textContent = data.error;
+  } else {
+    document.getElementById("project-error").textContent = "";
+  }
+  loadProjects();
+}
+
+function openProject(id, name, pushHistory = true) {
+  currentProjectId = id;
+  document.getElementById("current-project-name").textContent = name;
+  document.getElementById("admin-panel").style.display = role === "admin" ? "block" : "none";
+  loadTasks();
+  showScreen("tasks-screen", `/projects/${id}/tasks`, pushHistory);
+}
+
+document.getElementById("back-to-projects-button").addEventListener("click", () => {
+  route("/projects");
+});
+
+// --- משימות ---
+async function loadTasks() {
+  const res = await fetch(`${API}/projects/${currentProjectId}/tasks`, {
+    headers: { authorization: token }
+  });
+  const data = await res.json();
+  const list = document.getElementById("task-list");
+  list.innerHTML = "";
+  if (!res.ok) {
+    document.getElementById("task-error").textContent = data.error;
+    return;
+  }
+  data.forEach(t => {
+    const li = document.createElement("li");
+    li.innerHTML = `${t.title} [<span class="task-status">${t.status}</span>] `;
+
+    const select = document.createElement("select");
+    ["pending", "in-progress", "done"].forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s;
+      opt.textContent = s;
+      if (s === t.status) opt.selected = true;
+      select.appendChild(opt);
+    });
+    select.addEventListener("change", () => updateTaskStatus(t.id, select.value));
+
+    li.appendChild(select);
+    list.appendChild(li);
+  });
+}
+
+document.getElementById("add-task-button").addEventListener("click", async () => {
+  const title = document.getElementById("new-task-title").value;
+  const res = await fetch(`${API}/projects/${currentProjectId}/tasks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", authorization: token },
+    body: JSON.stringify({ title })
+  });
+  const data = await res.json();
+  if (res.ok) {
+    document.getElementById("task-error").textContent = "";
+    document.getElementById("new-task-title").value = "";
+    loadTasks();
+  } else {
+    document.getElementById("task-error").textContent = data.error;
+  }
+});
+
+async function updateTaskStatus(id, status) {
+  const res = await fetch(`${API}/tasks/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", authorization: token },
+    body: JSON.stringify({ status })
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    document.getElementById("task-error").textContent = data.error;
+  } else {
+    document.getElementById("task-error").textContent = "";
+  }
+  loadTasks();
+}
+</script>
+</body>
+</html>

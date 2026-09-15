@@ -46,7 +46,10 @@ db.exec(`
 // הרשמה - role ברירת מחדל הוא 'user', אלא אם מציינים אחרת
 app.post('/register', (req, res) => {
   const { username, password, role } = req.body;
-  if (!username || !password) {
+  if (!username || !username.trim() || !password || !password.trim()) {
+    return res.status(400).json({ error: 'username and password are required' });
+  }
+  if (username.trim().length < 4 || password.trim().length < 4) {
     return res.status(400).json({ error: 'username and password are required' });
   }
   const userRole = role === 'admin' ? 'admin' : 'user';
@@ -132,6 +135,24 @@ app.delete('/projects/:id', auth, (req, res) => {
   db.prepare('DELETE FROM tasks WHERE project_id = ?').run(id);
   db.prepare('DELETE FROM projects WHERE id = ?').run(id);
   res.json({ message: 'Project deleted successfully' });
+});
+
+// PUT - עדכון שם פרויקט: רק הבעלים או admin
+app.put('/projects/:id', auth, (req, res) => {
+  const { id } = req.params;
+  const { name } = req.body;
+  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+  if (req.user.role !== 'admin' && project.owner_id !== req.user.id) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Project name is required' });
+  }
+  db.prepare('UPDATE projects SET name = ? WHERE id = ?').run(name, id);
+  res.json({ id: parseInt(id), name, owner_id: project.owner_id });
 });
 
 // POST - הוספת משימה לפרויקט ספציפי

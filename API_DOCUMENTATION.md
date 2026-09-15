@@ -107,6 +107,24 @@ Responses:
 
 ---
 
+### PUT /projects/:id
+Updates a project's name. Only the owner or an admin can do this.
+
+Headers: `authorization: <token>`
+
+Body (JSON):
+```
+{ "name": "string (required)" }
+```
+
+Responses:
+- 200: `{ "id": number, "name": "string", "owner_id": number }`
+- 400: `{ "error": "Project name is required" }`
+- 403: `{ "error": "Access denied" }`
+- 404: `{ "error": "Project not found" }`
+
+---
+
 ## Tasks
 
 ### POST /projects/:id/tasks
