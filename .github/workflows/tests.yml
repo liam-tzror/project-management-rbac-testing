@@ -21,6 +21,9 @@ jobs:
       - name: Install Node dependencies
         run: npm install
 
+      - name: Force Express 5 (matches local dev environment)
+        run: npm install express@5.2.1
+
       - name: Install Python dependencies
         run: pip install requests pytest pytest-playwright python-dotenv --break-system-packages
 
